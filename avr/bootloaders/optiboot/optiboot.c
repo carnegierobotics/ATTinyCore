@@ -308,11 +308,18 @@
 unsigned const int __attribute__((section(".version")))
 optiboot_version = 256*(OPTIBOOT_MAJVER + OPTIBOOT_CUSTOMVER) + OPTIBOOT_MINVER;
 
-
+const char __flash golden_image[] = {
+    #include "golden_image.h"
+};
+
+
 #include <inttypes.h>
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include <avr/eeprom.h>
+#include "CRC32.h"
+
+uint32_t __attribute__((section(".crc"))) crc_checksum;
 
 /*
  * optiboot uses several "address" variables that are sometimes byte pointers,
@@ -501,6 +508,8 @@ static inline void read_mem(uint8_t memtype,
 #ifdef SOFT_UART
 void uartDelay() __attribute__ ((naked));
 #endif
+
+void checkImage();
 
 /*
  * RAMSTART should be self-explanatory.  It's bigger on parts with a
@@ -812,6 +821,8 @@ int main(void) {
 #endif
 #endif
 
+  CRC32_reset();
+
   /* Forever loop: exits by causing WDT reset */
   for (;;) {
     /* get character from UART */
@@ -895,7 +906,12 @@ int main(void) {
 
       // read a page worth of contents
       bufPtr = buff.bptr;
-      do *bufPtr++ = getch();
+      do
+      {
+          uint8_t tmpByte = getch();
+          CRC32_update(tmpByte);
+          *bufPtr++ = tmpByte;
+      }
       while (--length);
 
       // Read command terminator, start reply
@@ -959,16 +975,16 @@ int main(void) {
     buff.bptr[0] = vect.bytes[0]; // rjmp to start of bootloader
     buff.bptr[1] = vect.bytes[1] | 0xC0;  // make an "rjmp"
 #if (save_vect_num > SPM_PAGESIZE/2)
-} else if (address.word == (SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))) { //allow for any vector
-    // Instruction is a relative jump (rjmp), so recalculate.
-    // an RJMP instruction is 0b1100xxxx xxxxxxxx, so we should be able to
-    // do math on the offsets without masking it off first.
-    addr16_t vect;
-    vect.bytes[0] = rstVect0_sav;
-    vect.bytes[1] = rstVect1_sav;
-    saveVect0_sav = buff.bptr[saveVect0-(SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))];
-    saveVect1_sav = buff.bptr[saveVect1-(SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))];
-    vect.word = (vect.word-save_vect_num); //subtract 'save' interrupt position
+    } else if (address.word == (SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))) { //allow for any vector
+        // Instruction is a relative jump (rjmp), so recalculate.
+        // an RJMP instruction is 0b1100xxxx xxxxxxxx, so we should be able to
+        // do math on the offsets without masking it off first.
+        addr16_t vect;
+        vect.bytes[0] = rstVect0_sav;
+        vect.bytes[1] = rstVect1_sav;
+        saveVect0_sav = buff.bptr[saveVect0-(SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))];
+        saveVect1_sav = buff.bptr[saveVect1-(SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))];
+        vect.word = (vect.word-save_vect_num); //subtract 'save' interrupt position
         // Move RESET jmp target to 'save' vector
         buff.bptr[saveVect0-(SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))] = vect.bytes[0];
         buff.bptr[saveVect1-(SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))] = (vect.bytes[1] & 0x0F)| 0xC0;  // make an "rjmp"
@@ -996,7 +1012,7 @@ int main(void) {
 
       writebuffer(desttype, buff, address, savelength);
 
-
+      crc_checksum = CRC32_finalize();
     }
     /* Read memory block mode, length is big endian.  */
     else if(ch == STK_READ_PAGE) {
@@ -1458,6 +1474,22 @@ static void do_spm(uint16_t address, uint8_t command, uint16_t data) {
 #endif
 }
 #endif
+
+void checkImage() {
+#ifdef DEBUG_ON
+    putch('F');
+#endif
+    watchdogConfig(WATCHDOG_OFF);
+
+
+
+    //now trigger a watchdog reset
+    watchdogConfig(WATCHDOG_16MS);  // short WDT timeout
+    while (1); 		                  // and busy-loop so that WD causes a reset and app start
+#ifdef DEBUG_ON
+    putch('X');
+#endif
+}
 
 
 
