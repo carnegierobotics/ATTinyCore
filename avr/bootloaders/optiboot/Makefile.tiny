@@ -902,7 +902,7 @@ attiny45: TARGET = attiny45
 attiny45: MCU_TARGET = attiny45
 attiny45: CFLAGS += $(COMMON_OPTIONS) '-DVIRTUAL_BOOT_PARTITION' '-DLED_START_FLASHES=0' '-DSOFT_UART'
 attiny45: AVR_FREQ ?= 8000000L
-attiny45: LDSECTIONS  = -Wl,--section-start=.text=0x0C00 -Wl,--section-start=.version=0x0ffe -Wl,--section-start=.crc=0x0ffa
+attiny45: LDSECTIONS  = -Wl,--section-start=.text=0x0AE0 -Wl,--section-start=.version=0x0ffe -Wl,--section-start=.crc=0x0ffa
 attiny45: $(PROGRAM)_attiny45.hex
 ifndef PRODUCTION
 attiny45: $(PROGRAM)_attiny45.lst

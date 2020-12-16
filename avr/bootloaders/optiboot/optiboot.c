@@ -314,6 +314,7 @@ const char __flash golden_image[] = {
 
 
 #include <inttypes.h>
+#include <stdlib.h>
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include <avr/eeprom.h>
@@ -509,7 +510,7 @@ static inline void read_mem(uint8_t memtype,
 void uartDelay() __attribute__ ((naked));
 #endif
 
-void checkImage();
+uint8_t checkImage();
 
 /*
  * RAMSTART should be self-explanatory.  It's bigger on parts with a
@@ -821,7 +822,20 @@ int main(void) {
 #endif
 #endif
 
-  CRC32_reset();
+  uint8_t validImage = checkImage();
+
+  putch('i');
+  putch('m');
+  putch('g');
+  putch(':');
+  if (validImage)
+  {
+      putch('g');
+  }
+  else
+  {
+      putch('b');
+  }
 
   /* Forever loop: exits by causing WDT reset */
   for (;;) {
@@ -909,7 +923,6 @@ int main(void) {
       do
       {
           uint8_t tmpByte = getch();
-          CRC32_update(tmpByte);
           *bufPtr++ = tmpByte;
       }
       while (--length);
@@ -1011,8 +1024,6 @@ int main(void) {
 #endif // VBP
 
       writebuffer(desttype, buff, address, savelength);
-
-      crc_checksum = CRC32_finalize();
     }
     /* Read memory block mode, length is big endian.  */
     else if(ch == STK_READ_PAGE) {
@@ -1475,20 +1486,46 @@ static void do_spm(uint16_t address, uint8_t command, uint16_t data) {
 }
 #endif
 
-void checkImage() {
-#ifdef DEBUG_ON
+uint8_t checkImage()
+{
+    /*
     putch('F');
-#endif
+
     watchdogConfig(WATCHDOG_OFF);
 
+    CRC32_reset();
 
+    for (uint16_t addr = 0; addr < &crc_checksum; addr++)
+    {
+        putch('V');
+        uint8_t b = pgm_read_byte_near(addr);
+        CRC32_update(b);
+    }
+
+    uint32_t crc = CRC32_finalize();
+    putch('L');
+    char lCRC[16];
+    itoa(crc, lCRC, 10);
+    for (uint8_t i = 0; i < 16; i++)
+    {
+        putch(lCRC[i]);
+    }
+
+    putch('I');
+    char iCRC[16];
+    itoa(crc_checksum, iCRC, 10);
+    for (uint8_t i = 0; i < 16; i++)
+    {
+        putch(iCRC[i]);
+    }
 
     //now trigger a watchdog reset
     watchdogConfig(WATCHDOG_16MS);  // short WDT timeout
-    while (1); 		                  // and busy-loop so that WD causes a reset and app start
-#ifdef DEBUG_ON
+
     putch('X');
-#endif
+
+    return (crc == crc_checksum);
+     */
 }
 
 
