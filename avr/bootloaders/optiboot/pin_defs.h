@@ -586,15 +586,15 @@
 /*------------------------------------------------------------------------ */
 /* LED is on B2 */
 #if !defined(LED)
-#define LED   B2
+#define LED   B3
 #endif
 
 #ifdef SOFT_UART
 #define UART_PORT   PORTB
 #define UART_PIN    PINB
 #define UART_DDR    DDRB
-#define UART_TX_BIT 0
-#define UART_RX_BIT 1
+#define UART_TX_BIT 1
+#define UART_RX_BIT 0
 #endif
 #endif
 

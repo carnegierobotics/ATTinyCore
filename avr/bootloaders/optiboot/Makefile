@@ -286,9 +286,6 @@ COMMON_OPTIONS += $(SOFT_UART_CMD) $(LED_DATA_FLASH_CMD) $(LED_CMD) $(SS_CMD)
 COMMON_OPTIONS += $(SUPPORT_EEPROM_CMD) $(LED_START_ON_CMD) $(APPSPM_CMD)
 COMMON_OPTIONS += $(VERSION_CMD) $(LOWERCAL_CMD)
 COMMON_OPTIONS += $(RS485_CMD) $(TIMEOUT_CMD) $(POR_CMD) $(EXTR_CMD)
-COMMON_OPTIONS += -I../../../../CRC32/src
-
-LIBS =  -L../../../../CRC32 -lCRC32Switch
 
 #UART is handled separately and only passed for devices with more than one.
 HELPTEXT += "Option UART=n                - use UARTn for communications\n"

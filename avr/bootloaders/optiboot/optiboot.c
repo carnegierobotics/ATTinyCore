@@ -302,25 +302,17 @@
  */
 
 #if !defined(OPTIBOOT_CUSTOMVER)
-#define OPTIBOOT_CUSTOMVER 51
+#define OPTIBOOT_CUSTOMVER 99
 #endif
 
 unsigned const int __attribute__((section(".version")))
 optiboot_version = 256*(OPTIBOOT_MAJVER + OPTIBOOT_CUSTOMVER) + OPTIBOOT_MINVER;
 
-const char __flash golden_image[] = {
-    #include "golden_image.h"
-};
-
-
+
 #include <inttypes.h>
-#include <stdlib.h>
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include <avr/eeprom.h>
-#include "CRC32.h"
-
-uint32_t __attribute__((section(".crc"))) crc_checksum;
 
 /*
  * optiboot uses several "address" variables that are sometimes byte pointers,
@@ -510,7 +502,7 @@ static inline void read_mem(uint8_t memtype,
 void uartDelay() __attribute__ ((naked));
 #endif
 
-uint8_t checkImage();
+//void puthex(uint8_t number);
 
 /*
  * RAMSTART should be self-explanatory.  It's bigger on parts with a
@@ -584,6 +576,7 @@ static addr16_t buff = {(uint8_t *)(RAMSTART)};
 #define appstart_vec (0)
 #endif // VIRTUAL_BOOT_PARTITION
 
+static uint8_t IMAGE_VALID;
 
 /* everything that needs to run VERY early */
 void pre_main(void) {
@@ -605,6 +598,10 @@ void pre_main(void) {
 /* main program starts here */
 int main(void) {
   uint8_t ch;
+
+  // Set LED to on
+  DDRB |= _BV(3);
+  PORTB |= _BV(3);
 
   /*
    * Making these local and in registers prevents the need for initializing
@@ -633,6 +630,17 @@ int main(void) {
   SP=RAMEND;  // This is done by hardware reset
 #endif
 
+    uint8_t valid_flag = pgm_read_byte_near(0x0ABF);
+    IMAGE_VALID = (valid_flag == 0xAA);
+    if (!IMAGE_VALID)
+    {
+        watchdogConfig(WATCHDOG_OFF);
+
+        // Set power enable to high
+        DDRB |= _BV(4);
+        PORTB |= _BV(4);
+    }
+
   /*
    * Protect as much from MCUSR as possible for application
    * and still skip bootloader if not necessary
@@ -644,7 +652,8 @@ int main(void) {
   ch = MCUSTATUSREG;
 
   // Skip all logic and run bootloader if MCUSR is cleared (application request)
-  if (ch != 0) {
+  if (IMAGE_VALID && ch != 0)
+  {
     /*
      * To run the boot loader, External Reset Flag must be set.
      * If not, we could make shortcut and jump directly to application code.
@@ -822,20 +831,7 @@ int main(void) {
 #endif
 #endif
 
-  uint8_t validImage = checkImage();
-
-  putch('i');
-  putch('m');
-  putch('g');
-  putch(':');
-  if (validImage)
-  {
-      putch('g');
-  }
-  else
-  {
-      putch('b');
-  }
+  //puthex(valid_flag);
 
   /* Forever loop: exits by causing WDT reset */
   for (;;) {
@@ -920,11 +916,7 @@ int main(void) {
 
       // read a page worth of contents
       bufPtr = buff.bptr;
-      do
-      {
-          uint8_t tmpByte = getch();
-          *bufPtr++ = tmpByte;
-      }
+      do *bufPtr++ = getch();
       while (--length);
 
       // Read command terminator, start reply
@@ -988,16 +980,16 @@ int main(void) {
     buff.bptr[0] = vect.bytes[0]; // rjmp to start of bootloader
     buff.bptr[1] = vect.bytes[1] | 0xC0;  // make an "rjmp"
 #if (save_vect_num > SPM_PAGESIZE/2)
-    } else if (address.word == (SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))) { //allow for any vector
-        // Instruction is a relative jump (rjmp), so recalculate.
-        // an RJMP instruction is 0b1100xxxx xxxxxxxx, so we should be able to
-        // do math on the offsets without masking it off first.
-        addr16_t vect;
-        vect.bytes[0] = rstVect0_sav;
-        vect.bytes[1] = rstVect1_sav;
-        saveVect0_sav = buff.bptr[saveVect0-(SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))];
-        saveVect1_sav = buff.bptr[saveVect1-(SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))];
-        vect.word = (vect.word-save_vect_num); //subtract 'save' interrupt position
+} else if (address.word == (SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))) { //allow for any vector
+    // Instruction is a relative jump (rjmp), so recalculate.
+    // an RJMP instruction is 0b1100xxxx xxxxxxxx, so we should be able to
+    // do math on the offsets without masking it off first.
+    addr16_t vect;
+    vect.bytes[0] = rstVect0_sav;
+    vect.bytes[1] = rstVect1_sav;
+    saveVect0_sav = buff.bptr[saveVect0-(SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))];
+    saveVect1_sav = buff.bptr[saveVect1-(SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))];
+    vect.word = (vect.word-save_vect_num); //subtract 'save' interrupt position
         // Move RESET jmp target to 'save' vector
         buff.bptr[saveVect0-(SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))] = vect.bytes[0];
         buff.bptr[saveVect1-(SPM_PAGESIZE*(save_vect_num/(SPM_PAGESIZE/2)))] = (vect.bytes[1] & 0x0F)| 0xC0;  // make an "rjmp"
@@ -1024,6 +1016,8 @@ int main(void) {
 #endif // VBP
 
       writebuffer(desttype, buff, address, savelength);
+
+
     }
     /* Read memory block mode, length is big endian.  */
     else if(ch == STK_READ_PAGE) {
@@ -1245,7 +1239,7 @@ void getNch(uint8_t count) {
 }
 
 void verifySpace() {
-  if (getch() != CRC_EOP) {
+  if ((getch() != CRC_EOP) && IMAGE_VALID) {
     watchdogConfig(WATCHDOG_16MS);    // shorten WD timeout
     while (1)                  // and busy-loop so that WD causes
       ;                      //  a reset and app start.
@@ -1486,49 +1480,22 @@ static void do_spm(uint16_t address, uint8_t command, uint16_t data) {
 }
 #endif
 
-uint8_t checkImage()
+/*
+void puthex(uint8_t number)
 {
-    /*
-    putch('F');
-
-    watchdogConfig(WATCHDOG_OFF);
-
-    CRC32_reset();
-
-    for (uint16_t addr = 0; addr < &crc_checksum; addr++)
-    {
-        putch('V');
-        uint8_t b = pgm_read_byte_near(addr);
-        CRC32_update(b);
-    }
-
-    uint32_t crc = CRC32_finalize();
-    putch('L');
-    char lCRC[16];
-    itoa(crc, lCRC, 10);
-    for (uint8_t i = 0; i < 16; i++)
-    {
-        putch(lCRC[i]);
-    }
-
-    putch('I');
-    char iCRC[16];
-    itoa(crc_checksum, iCRC, 10);
-    for (uint8_t i = 0; i < 16; i++)
-    {
-        putch(iCRC[i]);
-    }
-
-    //now trigger a watchdog reset
-    watchdogConfig(WATCHDOG_16MS);  // short WDT timeout
-
-    putch('X');
-
-    return (crc == crc_checksum);
-     */
+    uint8_t c;
+    c = ((number >> 4) & 0x0F);
+    if (c > 9)
+        putch(c -10 + 'A');
+    else
+        putch(c + '0');
+    c = number & 0x0F;
+    if (c > 9)
+        putch(c - 10 + 'A');
+    else
+        putch(c + '0');
 }
-
-
+*/
 
 #ifdef BIGBOOT
 /*
