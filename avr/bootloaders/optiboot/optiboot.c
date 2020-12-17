@@ -634,8 +634,6 @@ int main(void) {
     IMAGE_VALID = (valid_flag == 0xAA);
     if (!IMAGE_VALID)
     {
-        watchdogConfig(WATCHDOG_OFF);
-
         // Set power enable to high
         DDRB |= _BV(4);
         PORTB |= _BV(4);
@@ -809,7 +807,14 @@ int main(void) {
 #endif
 
   // Set up watchdog to trigger after 1s
-  watchdogConfig(WDTPERIOD);
+  if (IMAGE_VALID)
+  {
+      watchdogConfig(WDTPERIOD);
+  }
+  else
+  {
+      watchdogConfig(WATCHDOG_OFF);
+  }
 
 #if (LED_START_FLASHES > 0) || defined(LED_DATA_FLASH) || defined(LED_START_ON)
   /* Set LED pin as output */
@@ -1301,14 +1306,24 @@ void watchdogReset() {
 }
 
 void watchdogConfig(uint8_t x) {
+
+  if (x == WATCHDOG_OFF)
+  {
+      watchdogReset();
+      MCUSR = 0x00;
+      WDTCR |= _BV(WDCE) | _BV(WDE);
+      WDTCR = 0x00;
+  }
+  else
+  {
 #ifdef WDCE //does it have a Watchdog Change Enable?
- #ifdef WDTCSR
-  WDTCSR = _BV(WDCE) | _BV(WDE);
- #else
-  WDTCR= _BV(WDCE) | _BV(WDE);
- #endif
+#ifdef WDTCSR
+      WDTCSR = _BV(WDCE) | _BV(WDE);
+#else
+      WDTCR= _BV(WDCE) | _BV(WDE);
+#endif
 #else //then it must be one of those newfangled ones that use CCP
-  CCP=0xD8; //so write this magic number to CCP
+      CCP = 0xD8; //so write this magic number to CCP
 #endif
 
 #ifdef WDTCSR
@@ -1316,6 +1331,7 @@ void watchdogConfig(uint8_t x) {
 #else
   WDTCR= x;
 #endif
+  }
 }
 
 
