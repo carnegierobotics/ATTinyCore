@@ -630,7 +630,7 @@ int main(void) {
   SP=RAMEND;  // This is done by hardware reset
 #endif
 
-    uint8_t valid_flag = pgm_read_byte_near(0x0ABF);
+    uint8_t valid_flag = pgm_read_byte_near(0x0BFF);
     IMAGE_VALID = (valid_flag == 0xAA);
     if (!IMAGE_VALID)
     {
